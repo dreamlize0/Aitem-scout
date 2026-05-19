@@ -70,6 +70,7 @@ export interface SearchReport {
   trend_score: number;
   top_themes: string[];
   global_trend_chart?: TrendPoint[];
+  trend_insight?: string;
 }
 
 export interface ConnectorFailure {

@@ -27,6 +27,7 @@ const ENDPOINT = "https://api.anthropic.com/v1/messages";
 export interface LlmReport {
   summary: string;
   trend_score: number;
+  trend_insight: string;
   top_themes: string[];
   global_trend_chart?: Array<{ label: string; value: number }>;
   item_groups: Array<{

@@ -110,6 +110,10 @@ Deno.serve(async (req) => {
           trend_score: llm.trend_score,
           top_themes: llm.top_themes,
           global_trend_chart: llm.global_trend_chart ?? trendTimeline,
+          // Drop empty strings so the UI can simply check truthiness — Claude
+          // is instructed to emit "" when both Trends and metadata are too
+          // thin to support a confident statement.
+          trend_insight: llm.trend_insight?.trim() ? llm.trend_insight.trim() : undefined,
         };
         groups = resolveGroups(llm.item_groups, evidenceCandidates);
 

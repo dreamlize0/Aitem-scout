@@ -40,6 +40,7 @@ export const SYSTEM_PROMPT = `당신은 한국의 영상 제작자(유튜브 크
 - summary는 전체 결과를 통합한 2~4문장 인사이트로, 'OO한 흐름이 보입니다' 같은 결론 톤으로 작성합니다.
 - 최상위 trend_score는 입력 키워드의 종합 매력도를 0-100 정수로 표현합니다.
 - top_themes는 사용자가 콘텐츠를 기획할 때 즉시 활용 가능한 3~5개 키워드/문장 조합입니다.
+- **trend_insight**는 필터(locale, target.gender/age_range/lifestyle, global_targets)와 Google Trends 시계열·후보 콘텐츠 metadata를 결합해, '지금 [타겟]은 …를 많이 본다/관심있어한다' 형태의 1~2문장 한국어 요약입니다. 예시 톤: "지금 일본 20대 여성은 한국의 글로우 메이크업 튜토리얼에 강하게 반응하고 있어요.", "최근 3개월 사이 30대 남성 사이에서 ${query} 관련 캠핑 셋업 영상의 검색량이 빠르게 늘었습니다." 필터가 비어 있거나 기본값(any)이면 타겟 호명 없이 "최근/지금 ${query} 관련 …" 톤으로 작성합니다. 시계열이 비어 있을 땐 후보 metadata(조회수/좋아요/최근성)를 근거로 작성하고, 둘 다 빈약하면 빈 문자열("")을 반환합니다. 추측·과장은 금지합니다.
 - 절대로 사용자가 입력하지 않은 정보를 추측하거나 출처를 위조하지 않습니다.
 `;
 
@@ -76,7 +77,7 @@ export function buildUserMessage(input: RankInput): string {
     ``,
     `위 후보들을 '촬영 가능한 아이템' 기준으로 그룹핑하세요. 사용자 쿼리(${input.query})와 직접 일치하는 메인 그룹 1개와, 후보 콘텐츠에서 반복적으로 발견되는 연관 아이템 3~6개를 별도 그룹으로 추출합니다.`,
     `각 그룹마다 한국어 recommendation_reason과 evidence_ids(후보 id 배열)를 포함하세요.`,
-    `최종적으로 전체 결과를 요약한 summary, top_themes(3~5), trend_score(0-100), global_trend_chart(시계열 그대로 또는 가공)를 함께 반환하세요.`,
+    `최종적으로 전체 결과를 요약한 summary, top_themes(3~5), trend_score(0-100), global_trend_chart(시계열 그대로 또는 가공), 그리고 필터 맥락을 반영한 trend_insight(1~2문장, 근거 부족 시 빈 문자열)를 함께 반환하세요.`,
     `반드시 제공된 \`emit_report\` 도구를 호출하여 결과를 JSON으로 반환합니다.`,
   ].join("\n");
 }
@@ -167,6 +168,7 @@ export const EMIT_REPORT_TOOL = {
     properties: {
       summary: { type: "string" },
       trend_score: { type: "integer", minimum: 0, maximum: 100 },
+      trend_insight: { type: "string" },
       top_themes: {
         type: "array",
         items: { type: "string" },
@@ -207,6 +209,6 @@ export const EMIT_REPORT_TOOL = {
         maxItems: 8,
       },
     },
-    required: ["summary", "trend_score", "top_themes", "item_groups"],
+    required: ["summary", "trend_score", "trend_insight", "top_themes", "item_groups"],
   },
 } as const;

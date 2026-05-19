@@ -74,6 +74,10 @@ export interface SearchReport {
   trend_score: number;
   global_trend_chart?: Array<{ label: string; value: number }>;
   top_themes?: string[];
+  // Filter-aware "지금 X 타겟은 …" insight built from Google Trends timeline +
+  // filter context (locale, target, global_targets). Optional because the
+  // degraded fallback (no candidates / LLM failure) skips it.
+  trend_insight?: string;
 }
 
 export interface ConnectorFailure {

@@ -15,6 +15,7 @@ export const MOCK_SEARCH_RESPONSE: SearchResponseData = {
     summary:
       "성수동 팝업·외국인 로컬 맛집·가성비 효도 호캉스 키워드가 동반 상승 중입니다. 30-40대 여성과 외국인 관광객 타겟에서 시각적 임팩트가 강한 포맷이 우세합니다.",
     trend_score: 84,
+    trend_insight: "지금 30-40대 여성은 성수동 팝업·외국인이 줄 서는 로컬 맛집을 가장 많이 검색하고 있어요. 최근 4주 동안 관련 키워드 검색량이 2.5배로 늘었습니다.",
     top_themes: ["가성비 데이트", "외국인 반응", "효도 호캉스", "팝업 인생샷"],
     global_trend_chart: [
       { label: "2026-01", value: 35 },

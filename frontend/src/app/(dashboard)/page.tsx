@@ -326,6 +326,15 @@ export default function DashboardPage() {
                   </div>
                 )}
 
+                {report?.trend_insight && (
+                  <div className="bg-[var(--color-accent-green)]/5 border border-[var(--color-accent-green)]/20 rounded-2xl p-5 space-y-2">
+                    <div className="flex items-center gap-2 text-[var(--color-accent-green)] font-bold text-sm">
+                      <TrendingUp className="w-4 h-4" /> 지금 이 타겟은
+                    </div>
+                    <p className="text-gray-200 text-sm leading-relaxed">{report.trend_insight}</p>
+                  </div>
+                )}
+
                 {report?.summary && (
                   <div className="bg-[var(--color-primary)]/5 border border-[var(--color-primary)]/20 rounded-2xl p-5 space-y-2">
                     <div className="flex items-center gap-2 text-[var(--color-primary)] font-bold text-sm">

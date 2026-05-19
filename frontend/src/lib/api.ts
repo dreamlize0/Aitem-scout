@@ -8,6 +8,7 @@ import { notifyProjectsChanged } from "./projectsEvents";
 import type {
   ApiEnvelope,
   ApiError,
+  Business,
   ColdContactRequest,
   ColdContactResponseData,
   Project,
@@ -326,6 +327,28 @@ export async function saveItems(
   const savedItems = unwrap(data).items;
   notifyProjectsChanged();
   return savedItems;
+}
+
+export async function fetchBusinesses(query: string): Promise<Business[]> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new ApiClientError({
+      code: "INTERNAL",
+      message: "Supabase 환경변수가 설정되지 않았습니다 (.env.local 확인).",
+    });
+  }
+
+  const { data, error } = await supabase.functions.invoke<ApiEnvelope<{ items: Business[] }>>(
+    `businesses?q=${encodeURIComponent(query)}`,
+    { method: "GET" },
+  );
+
+  if (error) {
+    const surfaced = await surfaceFunctionError(error, "관련 업체 조회에 실패했습니다.");
+    throw new ApiClientError(surfaced);
+  }
+  if (!data) throw new ApiClientError({ code: "INTERNAL", message: "응답이 비어 있습니다." });
+  return unwrap(data).items;
 }
 
 export async function generateColdContact(

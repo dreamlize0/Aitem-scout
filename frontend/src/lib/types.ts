@@ -43,6 +43,20 @@ export interface ItemGroup {
   evidence: ReportItem[];
 }
 
+// Real-world contactable place tied to a group name. Returned by the
+// /businesses endpoint (Naver 지역검색 wrapper) so the detail panel can
+// surface actual shops/restaurants/venues alongside the content evidence.
+export interface Business {
+  name: string;
+  category: string;
+  description: string;
+  road_address: string;
+  jibun_address: string;
+  telephone: string;
+  link: string;
+  map_url: string;
+}
+
 export interface TrendPoint {
   label: string;
   value: number;

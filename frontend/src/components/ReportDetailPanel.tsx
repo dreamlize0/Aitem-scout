@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ExternalLink,
   Sparkles,
@@ -11,12 +11,15 @@ import {
   TrendingUp,
   Check,
   Send,
+  Phone,
+  MapPin,
+  Store,
 } from "lucide-react";
-import TrendChart from "./TrendChart";
 import SaveToFolderModal from "./SaveToFolderModal";
 import ColdContactModal from "./ColdContactModal";
 import { useSearchStore } from "@/store/useSearchStore";
-import type { Citation, ItemGroup, Project, ReportItem, SearchReport } from "@/lib/types";
+import { fetchBusinesses, ApiClientError } from "@/lib/api";
+import type { Business, Citation, ItemGroup, Project, ReportItem, SearchReport } from "@/lib/types";
 
 interface Props {
   item: ReportItem;
@@ -94,18 +97,49 @@ function mergedCitations(item: ReportItem): Citation[] {
   return out;
 }
 
-export default function ReportDetailPanel({ item, report, group, enableActions = false }: Props) {
+export default function ReportDetailPanel({ item, report: _report, group, enableActions = false }: Props) {
+  void _report; // retained on the props for forward-compat (shared/storage call sites still pass it)
   const citations = mergedCitations(item);
-  // Prefer the selected group's own score so the user can see how this item
-  // ranks vs siblings; fall back to the query-level score for storage/share
-  // views where there is no group context.
-  const trendScore = group?.trend_score ?? report?.trend_score;
   const target = useSearchStore((s) => s.filters.target);
-  const query = useSearchStore((s) => s.query);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const [savedTo, setSavedTo] = useState<Project | null>(null);
+
+  // Real-businesses panel — fetched on demand per group. Naver Local
+  // dominates Korean coverage and is sub-second, so we just (re)fetch on
+  // every group change rather than caching. `null` = idle, `[]` = loaded
+  // with zero hits (so we can show an empty state instead of a spinner).
+  const [businesses, setBusinesses] = useState<Business[] | null>(null);
+  const [businessesLoading, setBusinessesLoading] = useState(false);
+  const [businessesError, setBusinessesError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!group?.name) {
+      setBusinesses(null);
+      setBusinessesError(null);
+      return;
+    }
+    let cancelled = false;
+    setBusinessesLoading(true);
+    setBusinessesError(null);
+    fetchBusinesses(group.name)
+      .then((items) => {
+        if (cancelled) return;
+        setBusinesses(items);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const msg = err instanceof ApiClientError
+          ? `[${err.code}] ${err.message}`
+          : err instanceof Error ? err.message : "관련 업체 조회 실패";
+        setBusinessesError(msg);
+        setBusinesses([]);
+      })
+      .finally(() => {
+        if (!cancelled) setBusinessesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [group?.name]);
 
   return (
     <div className="h-full bg-[var(--color-surface)] border-l border-[var(--color-border)] p-8 overflow-y-auto flex flex-col gap-8 animate-in slide-in-from-right-8 duration-500">
@@ -155,30 +189,84 @@ export default function ReportDetailPanel({ item, report, group, enableActions =
         </p>
       )}
 
-      {/* Trend Chart Section — score is per-group (when a group is selected),
-          chart is query-level (Google Trends time series for the whole search,
-          not for each related item — that would mean N more API calls). The
-          caption above the chart spells out the distinction so the same chart
-          repeating across cards doesn't read as a bug. */}
-      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-white font-bold text-lg">
-            <TrendingUp className="w-5 h-5 text-[var(--color-accent-green)]" />
-            {group ? `${group.name} 트렌드 지수` : "글로벌 상승 트렌드 지수"}
-          </div>
-          {typeof trendScore === "number" && (
-            <span className="text-2xl font-black text-[var(--color-accent-green)]">
-              {trendScore}
+      {/* Related Businesses — Naver 지역검색 lookup on the group's name. Lets
+          the user jump from a curated item to actual contactable shops/places
+          without leaving the panel. Storage/share views skip this section
+          (no group context, and Naver Local isn't a useful saved-item field). */}
+      {group && (
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-white font-bold text-lg">
+              <Store className="w-5 h-5 text-[var(--color-accent-green)]" />
+              연관 업체
+            </div>
+            <span className="text-xs text-[var(--color-muted)]">
+              Naver 지역검색
             </span>
+          </div>
+
+          {businessesLoading && (
+            <div className="text-sm text-[var(--color-muted)]">관련 업체 찾는 중…</div>
+          )}
+
+          {businessesError && !businessesLoading && (
+            <div className="text-xs text-red-400/80">{businessesError}</div>
+          )}
+
+          {!businessesLoading && businesses && businesses.length === 0 && !businessesError && (
+            <div className="text-sm text-[var(--color-muted)]">
+              &apos;{group.name}&apos;에 매칭되는 한국 업체가 없습니다.
+            </div>
+          )}
+
+          {!businessesLoading && businesses && businesses.length > 0 && (
+            <ul className="space-y-3">
+              {businesses.map((b, idx) => (
+                <li
+                  key={`${b.name}-${idx}`}
+                  className="bg-black/20 border border-[var(--color-border)] rounded-xl p-4 space-y-2"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-bold text-gray-100 leading-tight">{b.name}</div>
+                      {b.category && (
+                        <div className="text-[11px] text-[var(--color-muted)] mt-0.5">
+                          {b.category}
+                        </div>
+                      )}
+                    </div>
+                    <a
+                      href={b.map_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-[var(--color-primary)] hover:text-white transition-colors inline-flex items-center gap-1 shrink-0"
+                    >
+                      지도 <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  {(b.road_address || b.jibun_address) && (
+                    <div className="flex items-start gap-2 text-xs text-gray-300">
+                      <MapPin className="w-3.5 h-3.5 text-[var(--color-muted)] mt-0.5 shrink-0" />
+                      <span className="break-words">{b.road_address || b.jibun_address}</span>
+                    </div>
+                  )}
+                  {b.telephone && (
+                    <div className="flex items-center gap-2 text-xs text-gray-300">
+                      <Phone className="w-3.5 h-3.5 text-[var(--color-muted)] shrink-0" />
+                      <a
+                        href={`tel:${b.telephone}`}
+                        className="hover:text-white transition-colors"
+                      >
+                        {b.telephone}
+                      </a>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
         </div>
-        {group && (
-          <div className="mt-2 text-[11px] text-[var(--color-muted)]">
-            아래 차트는 검색어 <span className="text-gray-300">&apos;{query || "전체"}&apos;</span> 의 최근 12개월 글로벌 트렌드입니다.
-          </div>
-        )}
-        <TrendChart data={report?.global_trend_chart} />
-      </div>
+      )}
 
       {/* AI Report Section */}
       {item.recommendation_reason && (

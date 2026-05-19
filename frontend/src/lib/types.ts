@@ -40,6 +40,9 @@ export interface ItemGroup {
   // 0-100. LLM-rated for THIS group; sibling groups should have distinct
   // scores so the UI can highlight the strongest pick.
   trend_score: number;
+  // Naver-Local-friendly search keyword for the businesses panel. Distinct
+  // from `name` so content modifiers ("탐방"/"리뷰") don't break the lookup.
+  business_query: string;
   evidence: ReportItem[];
 }
 

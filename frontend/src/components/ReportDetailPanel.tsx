@@ -113,8 +113,11 @@ export default function ReportDetailPanel({ item, report: _report, group, enable
   const [businesses, setBusinesses] = useState<Business[] | null>(null);
   const [businessesLoading, setBusinessesLoading] = useState(false);
   const [businessesError, setBusinessesError] = useState<string | null>(null);
+  // business_query falls back to name for backward compat with payloads
+  // emitted before this field existed (e.g. an already-cached older response).
+  const businessQuery = group?.business_query?.trim() || group?.name;
   useEffect(() => {
-    if (!group?.name) {
+    if (!businessQuery) {
       setBusinesses(null);
       setBusinessesError(null);
       return;
@@ -122,7 +125,7 @@ export default function ReportDetailPanel({ item, report: _report, group, enable
     let cancelled = false;
     setBusinessesLoading(true);
     setBusinessesError(null);
-    fetchBusinesses(group.name)
+    fetchBusinesses(businessQuery)
       .then((items) => {
         if (cancelled) return;
         setBusinesses(items);
@@ -139,7 +142,7 @@ export default function ReportDetailPanel({ item, report: _report, group, enable
         if (!cancelled) setBusinessesLoading(false);
       });
     return () => { cancelled = true; };
-  }, [group?.name]);
+  }, [businessQuery]);
 
   return (
     <div className="h-full bg-[var(--color-surface)] border-l border-[var(--color-border)] p-8 overflow-y-auto flex flex-col gap-8 animate-in slide-in-from-right-8 duration-500">
@@ -195,13 +198,19 @@ export default function ReportDetailPanel({ item, report: _report, group, enable
           (no group context, and Naver Local isn't a useful saved-item field). */}
       {group && (
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-white font-bold text-lg">
               <Store className="w-5 h-5 text-[var(--color-accent-green)]" />
               연관 업체
             </div>
-            <span className="text-xs text-[var(--color-muted)]">
+            <span className="text-xs text-[var(--color-muted)] text-right">
               Naver 지역검색
+              {businessQuery && (
+                <>
+                  <br />
+                  <span className="text-gray-400">키워드: {businessQuery}</span>
+                </>
+              )}
             </span>
           </div>
 
@@ -215,7 +224,7 @@ export default function ReportDetailPanel({ item, report: _report, group, enable
 
           {!businessesLoading && businesses && businesses.length === 0 && !businessesError && (
             <div className="text-sm text-[var(--color-muted)]">
-              &apos;{group.name}&apos;에 매칭되는 한국 업체가 없습니다.
+              &apos;{businessQuery}&apos;에 매칭되는 한국 업체가 없습니다.
             </div>
           )}
 

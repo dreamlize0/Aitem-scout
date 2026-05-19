@@ -62,6 +62,10 @@ export interface ItemGroup {
   // (likes/views/timestamps), platform diversity, and target fit. Sibling
   // groups should have distinct scores so the UI can rank/highlight.
   trend_score: number;
+  // Naver 지역검색-friendly keyword for the businesses panel. Strips content
+  // modifiers (탐방/리뷰/추천 etc.) from `name` so e.g. "홍대 피부과 탐방"
+  // becomes "홍대 피부과" — the search that actually matches real shops.
+  business_query: string;
   evidence: ReportItem[];
 }
 

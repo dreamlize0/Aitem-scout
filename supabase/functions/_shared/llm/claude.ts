@@ -34,6 +34,7 @@ export interface LlmReport {
     type: "main" | "related";
     recommendation_reason: string;
     trend_score: number;
+    business_query: string;
     evidence_ids: string[];
   }>;
 }

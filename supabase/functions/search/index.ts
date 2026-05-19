@@ -136,6 +136,7 @@ Deno.serve(async (req) => {
             type: "main",
             recommendation_reason: "",
             trend_score: 0,
+            business_query: reqBody.query,
             evidence: evidenceCandidates.slice(0, 12).map((i) => ({ ...i })),
           }];
         }
@@ -160,6 +161,7 @@ Deno.serve(async (req) => {
           type: "main",
           recommendation_reason: "",
           trend_score: 0,
+          business_query: reqBody.query,
           evidence: evidenceCandidates.slice(0, 12).map((i) => ({ ...i })),
         }];
       }
@@ -205,6 +207,7 @@ function resolveGroups(
     type: "main" | "related";
     recommendation_reason: string;
     trend_score: number;
+    business_query: string;
     evidence_ids: string[];
   }>,
   evidence: RawItem[],
@@ -221,11 +224,17 @@ function resolveGroups(
       if (e) items.push({ ...e, recommendation_reason: g.recommendation_reason });
     }
     if (items.length === 0) continue;
+    // Defensive: an empty business_query would make the detail panel call
+    // Naver Local with "", returning either an error or unrelated noise.
+    // Fall back to the group name in that case — better something than
+    // nothing, and that's the pre-business_query behavior we're improving on.
+    const businessQuery = (g.business_query?.trim() || g.name).slice(0, 60);
     out.push({
       name: g.name,
       type: g.type,
       recommendation_reason: g.recommendation_reason,
       trend_score: clampScore(g.trend_score),
+      business_query: businessQuery,
       evidence: items.slice(0, 8),
     });
   }

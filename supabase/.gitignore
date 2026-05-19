@@ -1,0 +1,12 @@
+# Local environment
+.env
+.env.local
+.env.*.local
+
+# Supabase CLI local stack data
+.branches/
+.temp/
+.vscode/
+
+# OS
+.DS_Store

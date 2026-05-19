@@ -35,8 +35,9 @@ export const SYSTEM_PROMPT = `당신은 한국의 영상 제작자(유튜브 크
 ## 응답 규칙
 - 모든 텍스트는 한국어로 작성합니다.
 - 그룹별 recommendation_reason은 한국어 2~3문장, 반드시 타겟 필터를 명시적으로 언급합니다.
+- **각 그룹마다 trend_score (0-100)를 별도로 부여합니다.** 위 4가지 체크리스트를 기반으로 그 그룹 자체의 현재 매력도/상승세를 평가하고, 형제 그룹들끼리 서로 다른 점수가 나오도록 합니다 (모두 같은 값 금지).
 - summary는 전체 결과를 통합한 2~4문장 인사이트로, 'OO한 흐름이 보입니다' 같은 결론 톤으로 작성합니다.
-- trend_score는 입력 키워드의 종합 매력도(타겟 적합성 + 트렌드 + 영상화 가능성)를 0-100 정수로 표현합니다.
+- 최상위 trend_score는 입력 키워드의 종합 매력도를 0-100 정수로 표현합니다.
 - top_themes는 사용자가 콘텐츠를 기획할 때 즉시 활용 가능한 3~5개 키워드/문장 조합입니다.
 - 절대로 사용자가 입력하지 않은 정보를 추측하거나 출처를 위조하지 않습니다.
 `;
@@ -191,13 +192,14 @@ export const EMIT_REPORT_TOOL = {
             name: { type: "string" },
             type: { type: "string", enum: ["main", "related"] },
             recommendation_reason: { type: "string" },
+            trend_score: { type: "integer", minimum: 0, maximum: 100 },
             evidence_ids: {
               type: "array",
               items: { type: "string" },
               minItems: 1,
             },
           },
-          required: ["name", "type", "recommendation_reason", "evidence_ids"],
+          required: ["name", "type", "recommendation_reason", "trend_score", "evidence_ids"],
         },
         minItems: 1,
         maxItems: 8,

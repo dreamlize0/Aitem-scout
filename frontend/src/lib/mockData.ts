@@ -28,6 +28,7 @@ export const MOCK_SEARCH_RESPONSE: SearchResponseData = {
     {
       name: "성수동 팝업스토어",
       type: "main",
+      trend_score: 88,
       recommendation_reason:
         "최근 인스타그램 릴스와 스레드에서 '성수동 팝업' 언급량이 전주 대비 300% 상승했습니다. 30-40대 여성 타겟에게 시각 임팩트가 강해 쇼츠/릴스 소재로 적합합니다.",
       evidence: [
@@ -55,6 +56,7 @@ export const MOCK_SEARCH_RESPONSE: SearchResponseData = {
     {
       name: "외국인 K-로컬 맛집",
       type: "related",
+      trend_score: 72,
       recommendation_reason:
         "일본 검색 트렌드에서 '한국 로컬 맛집' 검색량이 꾸준히 증가 중입니다. 일본인 관광객 타겟에게 투박한 아재 감성이 신선한 반응을 얻고 있습니다.",
       evidence: [
@@ -75,6 +77,7 @@ export const MOCK_SEARCH_RESPONSE: SearchResponseData = {
     {
       name: "가성비 효도 호캉스",
       type: "related",
+      trend_score: 65,
       recommendation_reason:
         "5월 가정의 달을 앞두고 '효도여행' 키워드가 급상승 중입니다. 가성비를 강조하면서 고급스러움을 연출하는 포맷이 유튜브 평균 시청 지속 시간에서 우세합니다.",
       evidence: [

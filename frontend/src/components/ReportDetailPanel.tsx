@@ -96,8 +96,12 @@ function mergedCitations(item: ReportItem): Citation[] {
 
 export default function ReportDetailPanel({ item, report, group, enableActions = false }: Props) {
   const citations = mergedCitations(item);
-  const trendScore = report?.trend_score;
+  // Prefer the selected group's own score so the user can see how this item
+  // ranks vs siblings; fall back to the query-level score for storage/share
+  // views where there is no group context.
+  const trendScore = group?.trend_score ?? report?.trend_score;
   const target = useSearchStore((s) => s.filters.target);
+  const query = useSearchStore((s) => s.query);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
@@ -151,12 +155,16 @@ export default function ReportDetailPanel({ item, report, group, enableActions =
         </p>
       )}
 
-      {/* Trend Chart Section */}
+      {/* Trend Chart Section — score is per-group (when a group is selected),
+          chart is query-level (Google Trends time series for the whole search,
+          not for each related item — that would mean N more API calls). The
+          caption above the chart spells out the distinction so the same chart
+          repeating across cards doesn't read as a bug. */}
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-white font-bold text-lg">
             <TrendingUp className="w-5 h-5 text-[var(--color-accent-green)]" />
-            글로벌 상승 트렌드 지수
+            {group ? `${group.name} 트렌드 지수` : "글로벌 상승 트렌드 지수"}
           </div>
           {typeof trendScore === "number" && (
             <span className="text-2xl font-black text-[var(--color-accent-green)]">
@@ -164,6 +172,11 @@ export default function ReportDetailPanel({ item, report, group, enableActions =
             </span>
           )}
         </div>
+        {group && (
+          <div className="mt-2 text-[11px] text-[var(--color-muted)]">
+            아래 차트는 검색어 <span className="text-gray-300">&apos;{query || "전체"}&apos;</span> 의 최근 12개월 글로벌 트렌드입니다.
+          </div>
+        )}
         <TrendChart data={report?.global_trend_chart} />
       </div>
 

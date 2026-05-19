@@ -58,6 +58,10 @@ export interface ItemGroup {
   name: string;
   type: "main" | "related";
   recommendation_reason: string;
+  // 0-100. LLM-rated for THIS group specifically, based on evidence metrics
+  // (likes/views/timestamps), platform diversity, and target fit. Sibling
+  // groups should have distinct scores so the UI can rank/highlight.
+  trend_score: number;
   evidence: ReportItem[];
 }
 

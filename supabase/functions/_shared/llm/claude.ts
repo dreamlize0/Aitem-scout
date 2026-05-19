@@ -33,6 +33,7 @@ export interface LlmReport {
     name: string;
     type: "main" | "related";
     recommendation_reason: string;
+    trend_score: number;
     evidence_ids: string[];
   }>;
 }

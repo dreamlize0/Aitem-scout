@@ -135,6 +135,7 @@ Deno.serve(async (req) => {
             name: reqBody.query,
             type: "main",
             recommendation_reason: "",
+            trend_score: 0,
             evidence: evidenceCandidates.slice(0, 12).map((i) => ({ ...i })),
           }];
         }
@@ -158,6 +159,7 @@ Deno.serve(async (req) => {
           name: reqBody.query,
           type: "main",
           recommendation_reason: "",
+          trend_score: 0,
           evidence: evidenceCandidates.slice(0, 12).map((i) => ({ ...i })),
         }];
       }
@@ -202,6 +204,7 @@ function resolveGroups(
     name: string;
     type: "main" | "related";
     recommendation_reason: string;
+    trend_score: number;
     evidence_ids: string[];
   }>,
   evidence: RawItem[],
@@ -222,6 +225,7 @@ function resolveGroups(
       name: g.name,
       type: g.type,
       recommendation_reason: g.recommendation_reason,
+      trend_score: clampScore(g.trend_score),
       evidence: items.slice(0, 8),
     });
   }
@@ -230,6 +234,11 @@ function resolveGroups(
     return a.type === "main" ? -1 : 1;
   });
   return out;
+}
+
+function clampScore(n: unknown): number {
+  const v = typeof n === "number" && Number.isFinite(n) ? Math.round(n) : 0;
+  return Math.max(0, Math.min(100, v));
 }
 
 async function safeJson(req: Request): Promise<Record<string, unknown> | null> {

@@ -37,6 +37,9 @@ export interface ItemGroup {
   name: string;
   type: "main" | "related";
   recommendation_reason: string;
+  // 0-100. LLM-rated for THIS group; sibling groups should have distinct
+  // scores so the UI can highlight the strongest pick.
+  trend_score: number;
   evidence: ReportItem[];
 }
 

@@ -116,9 +116,8 @@ create table if not exists public.search_caches (
   created_at timestamptz not null default now()
 );
 
-create index if not exists search_caches_active_idx
-  on public.search_caches (cache_key)
-  where expires_at > now();
+create index if not exists search_caches_expires_idx
+  on public.search_caches (expires_at);
 
 -- ---------- search_logs ----------
 create table if not exists public.search_logs (

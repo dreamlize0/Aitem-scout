@@ -1,64 +1,66 @@
-// Meta (Instagram Graph API) — hashtag search.
-// Docs: https://developers.facebook.com/docs/instagram-api/guides/hashtag-search
-// Flow: GET /ig_hashtag_search?user_id=...&q=... -> hashtag id -> GET /{id}/top_media
+// Instagram via Apify hashtag scraper (apify/instagram-hashtag-scraper).
+// Replaces direct Meta Graph API usage so the project doesn't need a Meta
+// business account + Instagram Graph approval. Pricing: ~$1.90 / 1k results.
 
-import { getEnv } from "../env.ts";
-import { timedFetch } from "../http.ts";
-import { UpstreamError, withRetry } from "../retry.ts";
+import { hasApifyToken, runApifyActor } from "../apify.ts";
 import type { RawItem } from "../types.ts";
 import type { ConnectorContext, SourceConnector } from "./base.ts";
 
-const BASE = "https://graph.facebook.com/v19.0";
+const ACTOR_ID = "apify/instagram-hashtag-scraper";
 
 export const metaConnector: SourceConnector = {
   name: "meta",
-  enabled: () => Boolean(getEnv("META_ACCESS_TOKEN") && getEnv("META_IG_BUSINESS_ID")),
+  enabled: () => hasApifyToken(),
 
   async fetch({ query }: ConnectorContext): Promise<RawItem[]> {
-    const token = getEnv("META_ACCESS_TOKEN")!;
-    const userId = getEnv("META_IG_BUSINESS_ID")!;
     const tag = query.replace(/[^a-zA-Z0-9가-힣]/g, "").slice(0, 50);
     if (!tag) return [];
 
-    const hashtagId = await withRetry(async () => {
-      const url = `${BASE}/ig_hashtag_search?user_id=${userId}&q=${encodeURIComponent(tag)}&access_token=${token}`;
-      const res = await timedFetch(url);
-      if (!res.ok) throw new UpstreamError(res.status, `Meta hashtag search ${res.status}`);
-      const json = (await res.json()) as { data: Array<{ id: string }> };
-      return json.data?.[0]?.id;
-    });
-    if (!hashtagId) return [];
-
-    const fields = "id,media_type,caption,permalink,media_url,thumbnail_url,timestamp,like_count";
-    const mediaUrl = `${BASE}/${hashtagId}/top_media?user_id=${userId}&fields=${fields}&access_token=${token}`;
-    const media = await withRetry(async () => {
-      const res = await timedFetch(mediaUrl);
-      if (!res.ok) throw new UpstreamError(res.status, `Meta top_media ${res.status}`);
-      return (await res.json()) as { data: Array<MetaMedia> };
+    const items = await runApifyActor<ApifyInstagramPost>(ACTOR_ID, {
+      hashtags: [tag],
+      resultsLimit: 10,
+      addParentData: false,
     });
 
-    return (media.data ?? []).slice(0, 8).map((m) => ({
-      id: `ig-${m.id}`,
-      title: truncate(m.caption ?? `Instagram post`, 80),
-      summary: m.caption ?? undefined,
-      thumbnail_url: m.thumbnail_url ?? m.media_url,
-      source_url: m.permalink,
-      source_platform: "instagram" as const,
-      metadata: { likes: m.like_count, posted_at: m.timestamp, media_type: m.media_type },
-      citations: [{ platform: "instagram" as const, url: m.permalink, excerpt: truncate(m.caption ?? "", 200) }],
-    }));
+    return items.slice(0, 8).flatMap((p): RawItem[] => {
+      const shortCode = p.shortCode ?? p.id;
+      if (!shortCode) return [];
+      const url = p.url ?? `https://www.instagram.com/p/${shortCode}/`;
+      const caption = p.caption ?? "";
+      return [{
+        id: `ig-${shortCode}`,
+        title: truncate(caption || "Instagram post", 80),
+        summary: caption || undefined,
+        thumbnail_url: p.displayUrl ?? p.thumbnailUrl,
+        source_url: url,
+        source_platform: "instagram",
+        metadata: {
+          likes: p.likesCount,
+          comments: p.commentsCount,
+          posted_at: p.timestamp,
+          media_type: p.type,
+        },
+        citations: [{
+          platform: "instagram",
+          url,
+          excerpt: truncate(caption, 200),
+        }],
+      }];
+    });
   },
 };
 
-interface MetaMedia {
-  id: string;
-  media_type?: string;
+interface ApifyInstagramPost {
+  id?: string;
+  shortCode?: string;
   caption?: string;
-  permalink: string;
-  media_url?: string;
-  thumbnail_url?: string;
+  displayUrl?: string;
+  thumbnailUrl?: string;
+  url?: string;
+  type?: string;
+  likesCount?: number;
+  commentsCount?: number;
   timestamp?: string;
-  like_count?: number;
 }
 
 function truncate(s: string, n: number): string {

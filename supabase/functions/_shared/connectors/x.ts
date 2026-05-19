@@ -1,17 +1,17 @@
-// X (Twitter) API v2 — recent search.
-// Docs: https://developer.x.com/en/docs/twitter-api/tweets/search/api-reference/get-tweets-search-recent
+// X (Twitter) via Apify tweet scraper (apidojo/tweet-scraper). Replaces the
+// official X API v2 because that requires a paid developer plan for any
+// non-trivial search throughput. Pricing: ~$0.40 / 1k tweets, minimum 50
+// tweets per query (we slice to 10 for downstream display but pay for ~50).
 
-import { getEnv } from "../env.ts";
-import { timedFetch } from "../http.ts";
-import { UpstreamError, withRetry } from "../retry.ts";
+import { hasApifyToken, runApifyActor } from "../apify.ts";
 import type { RawItem } from "../types.ts";
 import type { ConnectorContext, SourceConnector } from "./base.ts";
 
-const ENDPOINT = "https://api.x.com/2/tweets/search/recent";
+const ACTOR_ID = "apidojo/tweet-scraper";
 
-// Country -> primary language used for search filtering. We pick the first
+// Country -> primary language used for search filtering. Picks the first
 // global_target if present so a user choosing "🇯🇵 일본" actually gets Japanese
-// tweets; otherwise we default to Korean for the home market.
+// tweets; otherwise defaults to Korean for the home market.
 const COUNTRY_LANG: Record<string, string> = {
   JP: "ja",
   US: "en",
@@ -24,67 +24,70 @@ const COUNTRY_LANG: Record<string, string> = {
 
 export const xConnector: SourceConnector = {
   name: "x",
-  enabled: () => Boolean(getEnv("X_BEARER_TOKEN")),
+  enabled: () => hasApifyToken(),
 
   async fetch({ query, filters }: ConnectorContext): Promise<RawItem[]> {
-    const token = getEnv("X_BEARER_TOKEN")!;
     const country = filters.global_targets?.[0]?.toUpperCase();
     const lang = (country && COUNTRY_LANG[country]) ?? "ko";
-    const params = new URLSearchParams({
-      query: `${query} -is:retweet lang:${lang}`,
-      max_results: "20",
-      "tweet.fields": "public_metrics,created_at,entities,author_id",
-      expansions: "author_id",
-      "user.fields": "username,name,profile_image_url",
-    });
-    const json = await withRetry(async () => {
-      const res = await timedFetch(`${ENDPOINT}?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new UpstreamError(res.status, `X ${res.status}`);
-      return (await res.json()) as XResp;
+
+    const items = await runApifyActor<ApifyTweet>(ACTOR_ID, {
+      searchTerms: [query],
+      maxItems: 50, // actor enforces a 50-minimum per query
+      tweetLanguage: lang,
+      sort: "Top",
     });
 
-    const users = new Map<string, XUser>();
-    for (const u of json.includes?.users ?? []) users.set(u.id, u);
-
-    return (json.data ?? []).slice(0, 10).map((t) => {
-      const user = t.author_id ? users.get(t.author_id) : undefined;
-      const handle = user?.username ?? "i";
-      const url = `https://x.com/${handle}/status/${t.id}`;
-      return {
-        id: `x-${t.id}`,
-        title: truncate(t.text, 90),
-        summary: t.text,
+    return items.slice(0, 10).flatMap((t): RawItem[] => {
+      const id = t.id ?? t.id_str;
+      if (!id) return [];
+      const handle = t.author?.userName ?? t.author?.screen_name ?? "i";
+      const url = t.url ?? `https://x.com/${handle}/status/${id}`;
+      const text = t.text ?? t.fullText ?? "";
+      return [{
+        id: `x-${id}`,
+        title: truncate(text, 90),
+        summary: text || undefined,
         source_url: url,
-        source_platform: "x" as const,
-        thumbnail_url: user?.profile_image_url,
+        source_platform: "x",
+        thumbnail_url: t.author?.profilePicture ?? t.author?.profile_image_url,
         metadata: {
-          metrics: t.public_metrics,
-          created_at: t.created_at,
-          author: user?.username,
+          metrics: {
+            likes: t.likeCount,
+            retweets: t.retweetCount,
+            replies: t.replyCount,
+            views: t.viewCount,
+          },
+          created_at: t.createdAt ?? t.created_at,
+          author: handle,
         },
-        citations: [{ platform: "x" as const, url, excerpt: truncate(t.text, 200) }],
-      };
+        citations: [{
+          platform: "x",
+          url,
+          excerpt: truncate(text, 200),
+        }],
+      }];
     });
   },
 };
 
-interface XResp {
-  data?: Array<{
-    id: string;
-    text: string;
-    author_id?: string;
-    created_at?: string;
-    public_metrics?: Record<string, number>;
-  }>;
-  includes?: { users?: XUser[] };
-}
-interface XUser {
-  id: string;
-  username: string;
-  name?: string;
-  profile_image_url?: string;
+interface ApifyTweet {
+  id?: string;
+  id_str?: string;
+  text?: string;
+  fullText?: string;
+  url?: string;
+  createdAt?: string;
+  created_at?: string;
+  likeCount?: number;
+  retweetCount?: number;
+  replyCount?: number;
+  viewCount?: number;
+  author?: {
+    userName?: string;
+    screen_name?: string;
+    profilePicture?: string;
+    profile_image_url?: string;
+  };
 }
 
 function truncate(s: string, n: number): string {

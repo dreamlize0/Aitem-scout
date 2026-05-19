@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Search, Sparkles, Play, X, TrendingUp, AlertTriangle, LogOut, SlidersHorizontal, ChevronUp } from "lucide-react";
 import { useSearchStore } from "@/store/useSearchStore";
 import SkeletonLoader from "@/components/SkeletonLoader";
@@ -80,11 +80,14 @@ export default function DashboardPage() {
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [draftFilters, setDraftFilters] = useState<Filters>(filters);
 
-  useEffect(() => {
-    // Keep the draft in sync with external changes (chip-X removals) while the
-    // panel is closed. When the panel is open the draft is authoritative.
-    if (!filterPanelOpen) setDraftFilters(filters);
-  }, [filters, filterPanelOpen]);
+  // Open/close handlers snapshot the latest store filters into the draft at
+  // open-time, so external chip-X removals while the panel is closed don't
+  // strand the draft on stale state. Avoids the useEffect+setState antipattern.
+  const openFilterPanel = () => {
+    setDraftFilters(filters);
+    setFilterPanelOpen(true);
+  };
+  const closeFilterPanel = () => setFilterPanelOpen(false);
 
   const applyAndSearch = () => {
     setFilters(draftFilters);
@@ -267,7 +270,7 @@ export default function DashboardPage() {
                   <AppliedFilters value={filters} onChange={handleAppliedFiltersChange} />
                   <button
                     type="button"
-                    onClick={() => setFilterPanelOpen((v) => !v)}
+                    onClick={filterPanelOpen ? closeFilterPanel : openFilterPanel}
                     className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-white border border-[var(--color-border)] hover:border-white/20 rounded-full px-3 py-1 transition-colors ml-auto"
                   >
                     {filterPanelOpen ? (
@@ -288,10 +291,7 @@ export default function DashboardPage() {
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          setDraftFilters(filters);
-                          setFilterPanelOpen(false);
-                        }}
+                        onClick={closeFilterPanel}
                         className="px-4 py-2 rounded-lg border border-[var(--color-border)] text-[var(--color-muted)] hover:text-white hover:border-white/20 text-sm font-medium transition-colors"
                       >
                         취소

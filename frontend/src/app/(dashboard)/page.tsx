@@ -4,12 +4,12 @@ import { useState } from "react";
 import { Search, Sparkles, Play, X, TrendingUp, AlertTriangle, LogOut, SlidersHorizontal, ChevronUp } from "lucide-react";
 import { useSearchStore } from "@/store/useSearchStore";
 import SkeletonLoader from "@/components/SkeletonLoader";
-import SearchResultCard from "@/components/SearchResultCard";
+import GroupCard from "@/components/GroupCard";
 import ReportDetailPanel from "@/components/ReportDetailPanel";
 import SearchFilters from "@/components/SearchFilters";
 import AppliedFilters from "@/components/AppliedFilters";
 import FailedConnectorsBanner from "@/components/FailedConnectorsBanner";
-import type { SearchFilters as Filters } from "@/lib/types";
+import { groupToReportItem, type SearchFilters as Filters } from "@/lib/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut, useAuth } from "@/lib/useAuth";
@@ -38,9 +38,17 @@ export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  const items = response?.items ?? [];
+  const groups = response?.groups ?? [];
   const report = response?.report ?? null;
   const failed = response?.connectors.failed ?? [];
+  // Look up the originating group by the synthesised id baked into selectedItem
+  // (see groupToReportItem). Lets the detail panel render rich evidence cards
+  // instead of just a citations URL grid. Falls back to null for non-group
+  // sources (storage/share views never set this).
+  const selectedGroup =
+    selectedItem
+      ? groups.find((g) => `group-${g.type}-${g.name}` === selectedItem.id) ?? null
+      : null;
 
   // Backend /search requires auth. In real-API mode an anonymous click would
   // otherwise just produce an UNAUTHORIZED error panel — bounce to login with
@@ -94,6 +102,16 @@ export default function DashboardPage() {
     if (!requireAuthOrLogin()) return;
     performSearch();
     setFilterPanelOpen(false);
+  };
+
+  // "이 아이템으로 검색" on a related card: replace the query with the related
+  // item's name and re-run from scratch. Closes the open detail panel since
+  // its underlying group is about to be replaced by a different result set.
+  const handleResearch = (name: string) => {
+    setQuery(name);
+    setSelectedItem(null);
+    if (!requireAuthOrLogin()) return;
+    performSearch();
   };
 
   return (
@@ -256,7 +274,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border)] gap-4 flex-wrap">
                   <h2 className="text-lg font-medium text-[var(--color-muted)]">
                     <span className="text-white font-bold">&apos;{query || "추천"}&apos;</span>{" "}
-                    에 대한 AI 분석 결과 ({items.length}건)
+                    에 대한 AI 분석 결과 ({groups.length}개 아이템)
                   </h2>
                   {report && (
                     <div className="flex items-center gap-1 text-[var(--color-accent-green)] text-sm font-bold bg-[var(--color-accent-green)]/10 px-2.5 py-1 rounded-md">
@@ -332,16 +350,20 @@ export default function DashboardPage() {
                 <FailedConnectorsBanner failures={failed} />
 
                 <div className="space-y-4">
-                  {items.map((item, idx) => (
-                    <SearchResultCard
-                      key={item.id}
-                      item={item}
-                      isSelected={selectedItem?.id === item.id}
-                      onClick={() => setSelectedItem(item)}
-                      enterIndex={idx}
-                    />
-                  ))}
-                  {items.length === 0 && (
+                  {groups.map((group, idx) => {
+                    const synthetic = groupToReportItem(group);
+                    return (
+                      <GroupCard
+                        key={synthetic.id}
+                        group={group}
+                        isSelected={selectedItem?.id === synthetic.id}
+                        onClick={() => setSelectedItem(synthetic)}
+                        onResearch={handleResearch}
+                        enterIndex={idx}
+                      />
+                    );
+                  })}
+                  {groups.length === 0 && (
                     <div className="text-center text-[var(--color-muted)] py-10">
                       결과가 없습니다. 다른 키워드나 필터를 시도해 보세요.
                     </div>
@@ -363,6 +385,7 @@ export default function DashboardPage() {
                   key={selectedItem.id}
                   item={selectedItem}
                   report={report}
+                  group={selectedGroup}
                   enableActions={!!user}
                 />
               </div>

@@ -14,7 +14,11 @@ import { UpstreamError } from "./retry.ts";
 
 const BASE = "https://api.apify.com/v2";
 const DEFAULT_ACTOR_TIMEOUT_S = 45;
-const DEFAULT_HTTP_TIMEOUT_MS = 55_000;
+// HTTP wait = actor timeout + 5s buffer for the run-sync round-trip overhead.
+// The hard ceiling stays under Supabase's 60s edge-function budget so the
+// caller never gets killed in the middle of returning.
+const HTTP_BUFFER_MS = 5_000;
+const HTTP_TIMEOUT_CAP_MS = 58_000;
 
 export function hasApifyToken(): boolean {
   return Boolean(getEnv("APIFY_API_TOKEN"));
@@ -32,6 +36,7 @@ export async function runApifyActor<T>(
   // path segments. The tilde form keeps the URL readable in logs.
   const id = actorId.replace("/", "~");
   const timeoutS = opts.timeoutS ?? DEFAULT_ACTOR_TIMEOUT_S;
+  const httpTimeoutMs = Math.min(timeoutS * 1000 + HTTP_BUFFER_MS, HTTP_TIMEOUT_CAP_MS);
   const url =
     `${BASE}/acts/${id}/run-sync-get-dataset-items?token=${token}&timeout=${timeoutS}`;
 
@@ -42,7 +47,7 @@ export async function runApifyActor<T>(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     },
-    DEFAULT_HTTP_TIMEOUT_MS,
+    httpTimeoutMs,
   );
   if (!res.ok) {
     const body = await res.text().catch(() => "");

@@ -31,10 +31,17 @@ export async function fanout(query: string, filters: SearchFilters): Promise<Fan
   // `connectors/index.ts` determines which copy wins.
   const seenUrls = new Set<string>();
 
+  // Per-connector item count for diagnosis. A connector can "succeed" (no
+  // error thrown) and still return zero — for example tavily returning 0 hits
+  // for a niche query, or a connector that quietly failed auth pre-deploy.
+  // Logging here surfaces those silent-zero cases in supabase function logs.
+  const perConnector: Record<string, number> = {};
+
   results.forEach((r, idx) => {
     const name = active[idx].name;
     if (r.status === "fulfilled") {
       succeeded.push(name);
+      perConnector[name] = r.value.items.length;
       for (const it of r.value.items) {
         const url = normalizeUrl(it.source_url);
         if (url && seenUrls.has(url)) continue;
@@ -46,10 +53,15 @@ export async function fanout(query: string, filters: SearchFilters): Promise<Fan
         items.push(it);
       }
     } else {
+      perConnector[name] = -1;
+      // Surface the upstream error message — without this we just see "-1"
+      // in [fanout.counts] and have to add ad-hoc logging to each connector.
+      console.error(`[fanout.error:${name}]`, r.reason);
       failed.push(classify(name, r.reason));
     }
   });
 
+  console.log("[fanout.counts]", JSON.stringify(perConnector));
   return { items, succeeded, failed, trendTimeline };
 }
 

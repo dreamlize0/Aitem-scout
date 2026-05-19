@@ -30,12 +30,18 @@ export const xConnector: SourceConnector = {
     const country = filters.global_targets?.[0]?.toUpperCase();
     const lang = (country && COUNTRY_LANG[country]) ?? "ko";
 
+    // Twitter's anti-bot makes apidojo/tweet-scraper consistently slower than
+    // the other Apify actors — even fast runs hit 30-40s, and a cold start
+    // pushes us past the default 45s. Bumping to 53s gives the actor more
+    // breathing room while still leaving ~5s for the round-trip and a few
+    // seconds for the LLM call that follows the fanout. Anything longer
+    // risks the search function hitting the 60s Supabase edge-function cap.
     const items = await runApifyActor<ApifyTweet>(ACTOR_ID, {
       searchTerms: [query],
       maxItems: 50, // actor enforces a 50-minimum per query
       tweetLanguage: lang,
       sort: "Top",
-    });
+    }, { timeoutS: 53 });
 
     return items.slice(0, 10).flatMap((t): RawItem[] => {
       const id = t.id ?? t.id_str;

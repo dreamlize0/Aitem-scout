@@ -30,6 +30,16 @@ export interface ReportItem {
   metadata: Record<string, unknown>;
 }
 
+// LLM-curated grouping of evidence around a single shoot-able item. `name` is
+// what the user sees on the card (e.g. "남대문 화장품"); `type` distinguishes
+// the user's primary subject from LLM-discovered related subjects.
+export interface ItemGroup {
+  name: string;
+  type: "main" | "related";
+  recommendation_reason: string;
+  evidence: ReportItem[];
+}
+
 export interface TrendPoint {
   label: string;
   value: number;
@@ -56,7 +66,7 @@ export interface SearchResponseData {
     failed: ConnectorFailure[];
   };
   report: SearchReport;
-  items: ReportItem[];
+  groups: ItemGroup[];
 }
 
 export interface SearchFilters {
@@ -118,6 +128,38 @@ export interface ShareViewData {
     generated_at: string;
   };
   items: SavedItem[];
+}
+
+// Collapse a group into a single ReportItem for the detail panel. The group's
+// name becomes the title (so save/share carry the curated label, not the
+// raw evidence headline) and every evidence's source_url + citations are
+// merged into one deduped citations list — so the panel's "데이터 출처" grid
+// shows every platform the group is backed by.
+export function groupToReportItem(group: ItemGroup): ReportItem {
+  const primary = group.evidence[0];
+  const citations: Citation[] = [];
+  const seen = new Set<string>();
+  for (const e of group.evidence) {
+    for (const c of [
+      { platform: e.source_platform, url: e.source_url, excerpt: e.summary?.slice(0, 200) },
+      ...(e.citations ?? []),
+    ]) {
+      if (!c.url || seen.has(c.url)) continue;
+      seen.add(c.url);
+      citations.push(c);
+    }
+  }
+  return {
+    id: `group-${group.type}-${group.name}`,
+    title: group.name,
+    summary: primary?.summary,
+    thumbnail_url: primary?.thumbnail_url,
+    source_url: primary?.source_url ?? "",
+    source_platform: primary?.source_platform ?? "web",
+    recommendation_reason: group.recommendation_reason,
+    citations,
+    metadata: { group_type: group.type, evidence_count: group.evidence.length },
+  };
 }
 
 export function savedItemToReportItem(s: SavedItem): ReportItem {

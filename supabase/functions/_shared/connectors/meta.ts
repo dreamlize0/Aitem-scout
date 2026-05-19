@@ -22,6 +22,16 @@ export const metaConnector: SourceConnector = {
       addParentData: false,
     });
 
+    // The actor can succeed and still return [] — e.g. a hashtag with no
+    // recent public posts, or Instagram blocking the scrape session. We log
+    // the first item's keys (without leaking content) so we can tell at a
+    // glance whether the actor returned an unexpected shape vs simply 0 hits.
+    if (items.length === 0) {
+      console.warn(`[meta] actor returned 0 items for hashtag "${tag}"`);
+    } else {
+      console.log(`[meta] actor returned ${items.length} items, first item keys:`, Object.keys(items[0]));
+    }
+
     return items.slice(0, 8).flatMap((p): RawItem[] => {
       const shortCode = p.shortCode ?? p.id;
       if (!shortCode) return [];

@@ -5,11 +5,17 @@ import { CACHE_TTL_SECONDS } from "./env.ts";
 import { getServiceClient } from "./supabase.ts";
 import type { SearchFilters, SearchResponseData } from "./types.ts";
 
+// Bump when the response shape changes so the new code never serves an old
+// payload from cache (the DB column is jsonb so old shapes won't 500 — they
+// just won't have the fields the UI now expects).
+const CACHE_SCHEMA_VERSION = 2;
+
 export async function makeCacheKey(
   query: string,
   filters: SearchFilters | undefined,
 ): Promise<string> {
   const normalized = {
+    v: CACHE_SCHEMA_VERSION,
     q: query.trim().toLowerCase(),
     f: sortObject(filters ?? {}),
   };

@@ -13,6 +13,8 @@ import { generateReport, LlmError } from "../_shared/llm/claude.ts";
 import { getServiceClient } from "../_shared/supabase.ts";
 import type {
   ConnectorFailure,
+  ItemGroup,
+  RawItem,
   ReportItem,
   SearchFilters,
   SearchRequest,
@@ -73,13 +75,14 @@ Deno.serve(async (req) => {
 
     // 4) LLM
     let report: SearchResponseData["report"];
-    let reasonsById = new Map<string, string>();
-    // Maps each id LLM ranked to its index in the LLM output (0 = top pick).
-    // Items not ranked by LLM go to the bottom of the result list.
-    const llmRank = new Map<string, number>();
+    let groups: ItemGroup[] = [];
     let llmFailed = false;
 
-    if (rawItems.length === 0) {
+    // Items that flow into the LLM (and into evidence) — trend data lives in
+    // the report's chart, not in any group.
+    const evidenceCandidates = rawItems.filter((i) => i.source_platform !== "google_trends");
+
+    if (evidenceCandidates.length === 0) {
       report = {
         summary: "현재 활성화된 외부 데이터 소스에서 결과를 찾지 못했습니다. 다른 키워드로 시도하거나 필터를 완화해 보세요.",
         trend_score: 0,
@@ -94,7 +97,7 @@ Deno.serve(async (req) => {
           succeeded,
           failed,
           trendTimeline,
-          candidates: rawItems.map((i) => ({
+          candidates: evidenceCandidates.map((i) => ({
             id: i.id,
             title: i.title,
             summary: i.summary,
@@ -108,8 +111,33 @@ Deno.serve(async (req) => {
           top_themes: llm.top_themes,
           global_trend_chart: llm.global_trend_chart ?? trendTimeline,
         };
-        reasonsById = new Map(llm.items.map((r) => [r.id, r.recommendation_reason]));
-        llm.items.forEach((r, idx) => llmRank.set(r.id, idx));
+        groups = resolveGroups(llm.item_groups, evidenceCandidates);
+
+        // Visibility: when groups drop to 0 the UI shows "결과가 없습니다", so
+        // log enough to diagnose which side broke (LLM emitted no groups vs.
+        // emitted bad evidence_ids that didn't match the candidate pool).
+        if (groups.length === 0) {
+          console.warn(
+            "[search.groups.empty]",
+            JSON.stringify({
+              llm_groups: llm.item_groups.map((g) => ({
+                name: g.name,
+                type: g.type,
+                evidence_ids: g.evidence_ids,
+              })),
+              candidate_ids: evidenceCandidates.map((i) => i.id),
+            }),
+          );
+          // Fallback: rather than render a blank "no results" page next to the
+          // full AI report, surface raw evidence under a single main group
+          // with the user's query as the label. Better degraded UX than 0.
+          groups = [{
+            name: reqBody.query,
+            type: "main",
+            recommendation_reason: "",
+            evidence: evidenceCandidates.slice(0, 12).map((i) => ({ ...i })),
+          }];
+        }
       } catch (err) {
         console.error("[search] LLM failed; returning raw items without recommendations", err);
         llmFailed = true;
@@ -119,26 +147,21 @@ Deno.serve(async (req) => {
           message: err instanceof Error ? err.message : undefined,
         });
         report = {
-          summary: `${rawItems.length}개 후보 아이템을 수집했으나 AI 리포트 생성에 일시적 오류가 발생했습니다.`,
+          summary: `${evidenceCandidates.length}개 후보 아이템을 수집했으나 AI 리포트 생성에 일시적 오류가 발생했습니다.`,
           trend_score: 0,
           top_themes: [],
           global_trend_chart: trendTimeline,
         };
+        // LLM-less fallback: one "main" group with the user's query as name
+        // and all evidence below. Better than dropping the search entirely.
+        groups = [{
+          name: reqBody.query,
+          type: "main",
+          recommendation_reason: "",
+          evidence: evidenceCandidates.slice(0, 12).map((i) => ({ ...i })),
+        }];
       }
     }
-
-    // Merge LLM reasoning into raw items; preserve order LLM produced when available.
-    const finalItems: ReportItem[] = rawItems
-      .filter((i) => i.source_platform !== "google_trends") // trend data lives in the report
-      .map((i) => ({ ...i, recommendation_reason: reasonsById.get(i.id) }))
-      // LLM-ranked items first in LLM's order; unranked items keep raw order
-      // after that (Array.sort is stable in modern JS engines).
-      .sort((a, b) => {
-        const ra = llmRank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-        const rb = llmRank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-        return ra - rb;
-      })
-      .slice(0, 24);
 
     const latencyMs = Date.now() - startedAt;
     const responseData: SearchResponseData = {
@@ -146,7 +169,7 @@ Deno.serve(async (req) => {
       latency_ms: latencyMs,
       connectors: { succeeded, failed },
       report,
-      items: finalItems,
+      groups,
     };
 
     // 5) persist
@@ -170,6 +193,44 @@ Deno.serve(async (req) => {
     return handleUnknownError(err);
   }
 });
+
+// Hydrate LLM-emitted groups (evidence as ids) into full ItemGroup objects.
+// Looks each id up in the evidence pool, skips groups whose evidence has all
+// been dropped, and sorts main groups before related ones.
+function resolveGroups(
+  llmGroups: Array<{
+    name: string;
+    type: "main" | "related";
+    recommendation_reason: string;
+    evidence_ids: string[];
+  }>,
+  evidence: RawItem[],
+): ItemGroup[] {
+  const byId = new Map(evidence.map((e) => [e.id, e]));
+  const out: ItemGroup[] = [];
+  for (const g of llmGroups) {
+    const items: ReportItem[] = [];
+    const seen = new Set<string>();
+    for (const id of g.evidence_ids) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const e = byId.get(id);
+      if (e) items.push({ ...e, recommendation_reason: g.recommendation_reason });
+    }
+    if (items.length === 0) continue;
+    out.push({
+      name: g.name,
+      type: g.type,
+      recommendation_reason: g.recommendation_reason,
+      evidence: items.slice(0, 8),
+    });
+  }
+  out.sort((a, b) => {
+    if (a.type === b.type) return 0;
+    return a.type === "main" ? -1 : 1;
+  });
+  return out;
+}
 
 async function safeJson(req: Request): Promise<Record<string, unknown> | null> {
   try {

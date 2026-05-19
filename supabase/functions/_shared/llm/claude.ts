@@ -29,7 +29,12 @@ export interface LlmReport {
   trend_score: number;
   top_themes: string[];
   global_trend_chart?: Array<{ label: string; value: number }>;
-  items: Array<{ id: string; recommendation_reason: string }>;
+  item_groups: Array<{
+    name: string;
+    type: "main" | "related";
+    recommendation_reason: string;
+    evidence_ids: string[];
+  }>;
 }
 
 export class LlmError extends Error {
@@ -101,7 +106,7 @@ export async function generateReport(input: RankInput): Promise<LlmReport> {
   }
 
   const report = toolUse.input as LlmReport;
-  if (!report || typeof report.summary !== "string" || !Array.isArray(report.items)) {
+  if (!report || typeof report.summary !== "string" || !Array.isArray(report.item_groups)) {
     throw new LlmError("emit_report payload missing required fields");
   }
   return report;

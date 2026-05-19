@@ -31,6 +31,12 @@ const PLATFORM_LABEL: Record<string, string> = {
 export default function SearchResultCard({ item, isSelected, onClick, enterIndex }: Props) {
   const platformLabel = PLATFORM_LABEL[item.source_platform] ?? item.source_platform;
   const citationCount = item.citations?.length ?? 0;
+  // Saved items carry their group context in metadata (see groupToReportItem).
+  // Older saves predate this and won't have group_type — only render the
+  // badge when the field is present and well-formed.
+  const groupType = item.metadata?.group_type;
+  const groupBadge =
+    groupType === "main" ? "메인" : groupType === "related" ? "연관" : null;
 
   // Cap the delay so a long result list doesn't keep the user waiting on a
   // visible cascade — past index 7 every remaining card lands on the same beat.
@@ -74,9 +80,23 @@ export default function SearchResultCard({ item, isSelected, onClick, enterIndex
 
         <div className="flex-1 space-y-3 min-w-0">
           <div className="flex justify-between items-start gap-3">
-            <h3 className="text-xl font-bold text-white group-hover:text-[var(--color-primary)] transition-colors line-clamp-2">
-              {item.title}
-            </h3>
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <h3 className="text-xl font-bold text-white group-hover:text-[var(--color-primary)] transition-colors line-clamp-2">
+                {item.title}
+              </h3>
+              {groupBadge && (
+                <span
+                  className={cn(
+                    "text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-md border shrink-0",
+                    groupType === "main"
+                      ? "bg-[var(--color-primary)]/15 text-[var(--color-primary)] border-[var(--color-primary)]/30"
+                      : "bg-[var(--color-accent-green)]/10 text-[var(--color-accent-green)] border-[var(--color-accent-green)]/30",
+                  )}
+                >
+                  {groupBadge}
+                </span>
+              )}
+            </div>
             <span className="text-xs font-medium text-[var(--color-muted)] bg-[var(--color-surface-hover)] px-2 py-1 rounded-md shrink-0">
               {platformLabel}
             </span>

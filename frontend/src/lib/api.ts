@@ -34,6 +34,38 @@ function unwrap<T>(envelope: ApiEnvelope<T>): T {
   throw new ApiClientError({ code: "INTERNAL", message: "Malformed API response" });
 }
 
+// The functions-js SDK reports non-2xx responses as a FunctionsHttpError with
+// the body tucked away in `error.context` (a Response object). The default
+// `.message` is just "Edge Function returned a non-2xx status code", which is
+// useless for debugging — read the body to recover the backend's {code,message}.
+async function surfaceFunctionError(
+  err: unknown,
+  fallback: string,
+): Promise<ApiError> {
+  // The functions-js SDK exposes the failed Response through `error.context`.
+  // We snapshot it for debugging because reading the body is one-shot — once
+  // .text() resolves, a follow-up reader gets an empty stream.
+  console.error("[surfaceFunctionError] raw error:", err);
+  const ctx = (err as { context?: Response | undefined })?.context;
+  try {
+    if (ctx && typeof (ctx as Response).clone === "function") {
+      const cloned = (ctx as Response).clone();
+      const raw = await cloned.text();
+      console.error("[surfaceFunctionError] response body:", raw);
+      if (raw) {
+        const parsed = JSON.parse(raw) as ApiEnvelope<unknown>;
+        if (parsed?.status === "error") return parsed.error;
+      }
+    } else {
+      console.error("[surfaceFunctionError] no Response.context on error");
+    }
+  } catch (parseErr) {
+    console.error("[surfaceFunctionError] body parse failed:", parseErr);
+  }
+  const message = (err as { message?: string })?.message || fallback;
+  return { code: "INTERNAL", message };
+}
+
 export { isSupabaseConfigured };
 
 export async function searchAItems(req: SearchRequest): Promise<SearchResponseData> {
@@ -284,10 +316,11 @@ export async function saveItems(
   );
 
   if (error) {
-    throw new ApiClientError({
-      code: "INTERNAL",
-      message: error.message || "보관함 저장에 실패했습니다.",
-    });
+    // The functions-js SDK swallows the response body into a generic
+    // "non-2xx" message; pull the real backend envelope out so the caller
+    // sees the actual code/message instead of "INTERNAL: Edge Function returned…".
+    const surfaced = await surfaceFunctionError(error, "보관함 저장에 실패했습니다.");
+    throw new ApiClientError(surfaced);
   }
   if (!data) throw new ApiClientError({ code: "INTERNAL", message: "응답이 비어 있습니다." });
   const savedItems = unwrap(data).items;

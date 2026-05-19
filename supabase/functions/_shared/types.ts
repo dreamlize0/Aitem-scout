@@ -50,6 +50,17 @@ export interface ReportItem extends RawItem {
   recommendation_reason?: string;
 }
 
+// An LLM-curated grouping of evidence around a single shoot-able item.
+// `name` is what the user sees (e.g. "남대문 화장품"); `type` distinguishes
+// the user's primary search subject from LLM-discovered related subjects so
+// the UI can offer a "search again on this related item" affordance.
+export interface ItemGroup {
+  name: string;
+  type: "main" | "related";
+  recommendation_reason: string;
+  evidence: ReportItem[];
+}
+
 export interface SearchReport {
   summary: string;
   trend_score: number;
@@ -71,7 +82,7 @@ export interface SearchResponseData {
     failed: ConnectorFailure[];
   };
   report: SearchReport;
-  items: ReportItem[];
+  groups: ItemGroup[];
 }
 
 export interface SavedItem {

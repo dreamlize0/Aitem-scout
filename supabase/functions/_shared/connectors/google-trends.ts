@@ -31,16 +31,27 @@ export const googleTrendsConnector: SourceConnector = {
 };
 
 async function fetchViaSerpAPI(query: string, key: string, locale: string | undefined): Promise<RawItem[]> {
+  // SerpAPI's google_trends engine wants an ISO 639-1 language code in `hl`,
+  // not a BCP 47 locale. "ko-KR" returns 400 "Unsupported interface language";
+  // "ko" works. Strip the region suffix so callers can pass either form.
+  const hl = (locale ?? "ko-KR").split("-")[0];
   const params = new URLSearchParams({
     engine: "google_trends",
     q: query,
     data_type: "TIMESERIES",
     api_key: key,
-    hl: locale ?? "ko-KR",
+    hl,
   });
   const json = await withRetry(async () => {
     const res = await timedFetch(`https://serpapi.com/search?${params.toString()}`);
-    if (!res.ok) throw new UpstreamError(res.status, `SerpAPI ${res.status}`);
+    if (!res.ok) {
+      // Capture the SerpAPI body — they usually return JSON like
+      // `{ "error": "Missing query `q` parameter" }` which is the only useful
+      // signal for diagnosing a 400. Without this we just see "400" and have
+      // to guess. Keep the slice tight so the log entry stays readable.
+      const body = await res.text().catch(() => "");
+      throw new UpstreamError(res.status, `SerpAPI ${res.status}: ${body.slice(0, 300)}`);
+    }
     return await res.json();
   });
   const series = (json?.interest_over_time?.timeline_data ?? []) as Array<{

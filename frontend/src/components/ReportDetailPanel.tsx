@@ -16,11 +16,15 @@ import TrendChart from "./TrendChart";
 import SaveToFolderModal from "./SaveToFolderModal";
 import ColdContactModal from "./ColdContactModal";
 import { useSearchStore } from "@/store/useSearchStore";
-import type { Citation, Project, ReportItem, SearchReport } from "@/lib/types";
+import type { Citation, ItemGroup, Project, ReportItem, SearchReport } from "@/lib/types";
 
 interface Props {
   item: ReportItem;
   report?: SearchReport | null;
+  // When set, the panel is showing a curated group rather than a single saved
+  // item — we render an evidence list (rich cards) instead of the citations
+  // URL grid. Storage/share views omit this and fall back to citations.
+  group?: ItemGroup | null;
   // shared/public viewers pass false (or omit) — disables the save button.
   enableActions?: boolean;
 }
@@ -90,7 +94,7 @@ function mergedCitations(item: ReportItem): Citation[] {
   return out;
 }
 
-export default function ReportDetailPanel({ item, report, enableActions = false }: Props) {
+export default function ReportDetailPanel({ item, report, group, enableActions = false }: Props) {
   const citations = mergedCitations(item);
   const trendScore = report?.trend_score;
   const target = useSearchStore((s) => s.filters.target);
@@ -102,7 +106,21 @@ export default function ReportDetailPanel({ item, report, enableActions = false 
   return (
     <div className="h-full bg-[var(--color-surface)] border-l border-[var(--color-border)] p-8 overflow-y-auto flex flex-col gap-8 animate-in slide-in-from-right-8 duration-500">
       <div className="flex justify-between items-start gap-4">
-        <h2 className="text-2xl font-bold text-white leading-tight">{item.title}</h2>
+        <div className="min-w-0 flex items-center gap-2 flex-wrap">
+          <h2 className="text-2xl font-bold text-white leading-tight">{item.title}</h2>
+          {group && (
+            <span
+              className={
+                "text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-md border shrink-0 " +
+                (group.type === "main"
+                  ? "bg-[var(--color-primary)]/15 text-[var(--color-primary)] border-[var(--color-primary)]/30"
+                  : "bg-[var(--color-accent-green)]/10 text-[var(--color-accent-green)] border-[var(--color-accent-green)]/30")
+              }
+            >
+              {group.type === "main" ? "메인" : "연관"}
+            </span>
+          )}
+        </div>
         {enableActions && (
           <div className="flex gap-2 shrink-0">
             <button
@@ -124,7 +142,10 @@ export default function ReportDetailPanel({ item, report, enableActions = false 
         )}
       </div>
 
-      {item.summary && (
+      {/* In group mode the per-evidence summaries are richer than the primary
+          item's standalone summary, so we hide this section and let the
+          evidence list below carry that weight. */}
+      {!group && item.summary && (
         <p className="text-gray-300 leading-relaxed text-sm border-l-2 border-[var(--color-border)] pl-4">
           {item.summary}
         </p>
@@ -159,8 +180,58 @@ export default function ReportDetailPanel({ item, report, enableActions = false 
         </div>
       )}
 
-      {/* Source Links Section */}
-      {citations.length > 0 && (
+      {/* Evidence list (group mode) — full cards with thumbnail + excerpt so
+          the user can scan what this group actually contains. Falls back to
+          the simple citations grid below when group is absent (storage view). */}
+      {group && group.evidence.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-bold text-[var(--color-muted)] uppercase tracking-wider">
+            근거 콘텐츠 ({group.evidence.length}개)
+          </h3>
+          <div className="grid gap-3">
+            {group.evidence.map((e) => (
+              <a
+                key={e.id}
+                href={e.source_url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex gap-3 p-3 bg-black/20 border border-[var(--color-border)] rounded-xl hover:border-gray-500 transition-colors group"
+              >
+                <div className="w-20 h-20 bg-[var(--color-surface-hover)] rounded-lg flex items-center justify-center overflow-hidden shrink-0">
+                  {e.thumbnail_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={e.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="text-[var(--color-muted)]">{getPlatformIcon(e.source_platform)}</div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded bg-[var(--color-surface)] flex items-center justify-center shrink-0">
+                      {getPlatformIcon(e.source_platform)}
+                    </div>
+                    <span className="text-[10px] font-medium text-[var(--color-muted)] uppercase tracking-wider">
+                      {getPlatformName(e.source_platform)}
+                    </span>
+                  </div>
+                  <div className="font-medium text-gray-200 group-hover:text-white transition-colors text-sm line-clamp-2">
+                    {e.title}
+                  </div>
+                  {e.summary && (
+                    <div className="text-xs text-[var(--color-muted)] line-clamp-2">
+                      {e.summary}
+                    </div>
+                  )}
+                </div>
+                <ExternalLink className="w-4 h-4 text-[var(--color-muted)] group-hover:text-white transition-colors shrink-0 mt-1" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Citations grid (storage/share view fallback — no group context). */}
+      {!group && citations.length > 0 && (
         <div className="space-y-4">
           <h3 className="text-sm font-bold text-[var(--color-muted)] uppercase tracking-wider">
             데이터 출처 및 레퍼런스

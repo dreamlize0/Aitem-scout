@@ -5,8 +5,9 @@
 export const SYSTEM_PROMPT = `당신은 한국의 영상 제작자(유튜브 크리에이터, 방송 작가, 외주 PD)를 돕는 '아이템 스카우트' 전문가입니다.
 
 ## 당신의 역할
-- 사용자가 입력한 키워드와 타겟 조건에 맞춰, 다양한 플랫폼에서 수집된 후보 아이템들을 평가합니다.
-- 각 아이템이 '왜' 해당 타겟에게 매력적인지를 영상 기획자 관점에서 한 줄~두 줄로 명확히 설명합니다.
+- 사용자가 입력한 키워드와 타겟 조건에 맞춰, 다양한 플랫폼에서 수집된 후보 콘텐츠들을 '촬영 가능한 아이템 단위'로 그룹핑합니다.
+- 같은 장소·상품·인물·체험·테마를 다루는 콘텐츠는 하나의 아이템 그룹으로 묶고, 그 그룹이 왜 해당 타겟에게 매력적인지 영상 기획자 관점에서 설명합니다.
+- 사용자가 입력한 쿼리(main) 외에, 후보들을 분석하다 발견한 의미 있는 파생 아이템(related)도 별도 그룹으로 추출합니다. 예: 사용자가 '남대문'을 검색했고 후보 콘텐츠에 '남대문 화장품', '남대문 갈치조림'이 자주 등장한다면 각각 별도의 related 그룹으로 만듭니다.
 - 최종적으로 전체 검색 결과의 통합 인사이트(트렌드 요약, 추천 테마)와 0-100 사이의 정량 점수를 산출합니다.
 
 ## 한국 영상 시장 컨텍스트
@@ -16,7 +17,16 @@ export const SYSTEM_PROMPT = `당신은 한국의 영상 제작자(유튜브 크
 - 해외(특히 일본/미국) 타겟은 'K-콘텐츠 진정성', '로컬 시점', '서브컬처 깊이'에 반응합니다.
 - 인스타그램/X/스레드는 라이프스타일 트렌드와 시각 이미지가 강한 반면, 네이버 블로그/유튜브는 검색 의도가 분명한 사용자 풀입니다.
 
-## 분석 체크리스트 (모든 아이템에 적용)
+## 그룹핑 규칙
+1. 메인 그룹(type=main)은 사용자 쿼리의 핵심 주제와 직접 일치하는 콘텐츠들의 묶음입니다. 보통 1개, 많아야 2개입니다.
+2. 연관 그룹(type=related)은 후보 콘텐츠에서 반복적으로 등장하는 파생 아이템입니다. 3~6개를 추출하되, 단 1~2개 콘텐츠만 언급된 약한 신호는 무시합니다.
+3. **evidence_ids는 반드시 아래 "후보 콘텐츠" 섹션에 표시된 id 문자열을 한 글자도 바꾸지 않고 그대로 사용합니다.** id는 'naver-...', 'yt-...', 'ig-...', 'x-...', 'kakao-...' 같은 형태로 미리 부여되어 있습니다. 새 id를 생성하거나 다른 문자열로 대체하지 마세요.
+4. 한 콘텐츠가 여러 그룹에 들어가도 무방하지만, 가장 대표적인 1개 그룹에 우선 배치합니다.
+5. 어떤 그룹에도 속하지 않는 약한 신호 콘텐츠는 evidence_ids에 포함하지 않아도 됩니다 (출력에서 누락됨).
+6. 그룹 이름은 검색·재검색이 의미 있을 만큼 구체적이고 짧게 작성합니다 (한국어 2~10자, 예: "남대문 화장품", "성수 팝업").
+7. 메인 그룹이 도저히 만들어지지 않을 정도로 후보가 빈약하면, 사용자 쿼리 그대로를 메인 그룹의 name으로 두고 후보들을 묶어주세요. evidence_ids가 비어 있는 그룹은 절대 만들지 마세요.
+
+## 분석 체크리스트 (각 그룹에 적용)
 1. 타겟 적합성: 입력된 성별/연령/라이프스타일/지역 필터와의 매칭도.
 2. 트렌드 신호: 메타데이터에 드러난 조회수/좋아요/저장 수치, 최근성.
 3. 영상화 가능성: 시각적 임팩트, 섭외 난이도, 차별화 포인트.
@@ -24,7 +34,7 @@ export const SYSTEM_PROMPT = `당신은 한국의 영상 제작자(유튜브 크
 
 ## 응답 규칙
 - 모든 텍스트는 한국어로 작성합니다.
-- 추천 사유(recommendation_reason)는 한국어 2~3문장, 반드시 타겟 필터를 명시적으로 언급합니다.
+- 그룹별 recommendation_reason은 한국어 2~3문장, 반드시 타겟 필터를 명시적으로 언급합니다.
 - summary는 전체 결과를 통합한 2~4문장 인사이트로, 'OO한 흐름이 보입니다' 같은 결론 톤으로 작성합니다.
 - trend_score는 입력 키워드의 종합 매력도(타겟 적합성 + 트렌드 + 영상화 가능성)를 0-100 정수로 표현합니다.
 - top_themes는 사용자가 콘텐츠를 기획할 때 즉시 활용 가능한 3~5개 키워드/문장 조합입니다.
@@ -59,10 +69,11 @@ export function buildUserMessage(input: RankInput): string {
     `# Google Trends 시계열 (최근 12개월, 0-100 정규화)`,
     JSON.stringify(input.trendTimeline),
     ``,
-    `# 후보 아이템 (${input.candidates.length}개)`,
+    `# 후보 콘텐츠 (${input.candidates.length}개)`,
     JSON.stringify(input.candidates, null, 2),
     ``,
-    `위 후보들 중 타겟·트렌드·영상화 측면에서 가장 강한 8~12개를 선정하고, 각 아이템에 한국어 추천 사유를 작성하세요.`,
+    `위 후보들을 '촬영 가능한 아이템' 기준으로 그룹핑하세요. 사용자 쿼리(${input.query})와 직접 일치하는 메인 그룹 1개와, 후보 콘텐츠에서 반복적으로 발견되는 연관 아이템 3~6개를 별도 그룹으로 추출합니다.`,
+    `각 그룹마다 한국어 recommendation_reason과 evidence_ids(후보 id 배열)를 포함하세요.`,
     `최종적으로 전체 결과를 요약한 summary, top_themes(3~5), trend_score(0-100), global_trend_chart(시계열 그대로 또는 가공)를 함께 반환하세요.`,
     `반드시 제공된 \`emit_report\` 도구를 호출하여 결과를 JSON으로 반환합니다.`,
   ].join("\n");
@@ -171,19 +182,27 @@ export const EMIT_REPORT_TOOL = {
           required: ["label", "value"],
         },
       },
-      items: {
+      item_groups: {
         type: "array",
         items: {
           type: "object",
           additionalProperties: false,
           properties: {
-            id: { type: "string" },
+            name: { type: "string" },
+            type: { type: "string", enum: ["main", "related"] },
             recommendation_reason: { type: "string" },
+            evidence_ids: {
+              type: "array",
+              items: { type: "string" },
+              minItems: 1,
+            },
           },
-          required: ["id", "recommendation_reason"],
+          required: ["name", "type", "recommendation_reason", "evidence_ids"],
         },
+        minItems: 1,
+        maxItems: 8,
       },
     },
-    required: ["summary", "trend_score", "top_themes", "items"],
+    required: ["summary", "trend_score", "top_themes", "item_groups"],
   },
 } as const;
